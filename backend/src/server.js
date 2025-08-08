@@ -21,12 +21,31 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// CORS configuration
+// More robust CORS configuration for Render
 const corsOptions = {
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  origin: function (origin, callback) {
+    const allowedOrigins = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+      : ['http://localhost:3000'];
+    
+    console.log('CORS Debug - Origin:', origin);
+    console.log('CORS Debug - Allowed Origins:', allowedOrigins);
+    
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      console.log('CORS Debug - Origin allowed');
+      callback(null, true);
+    } else {
+      console.log('CORS Debug - Origin blocked');
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
 
 // Body parsing middleware
@@ -45,13 +64,22 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handling middleware
+// Add CORS error handling
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
-  });
+  if (err.message === 'Not allowed by CORS') {
+    console.log('CORS Error - Origin:', req.headers.origin);
+    res.status(403).json({ 
+      error: 'CORS policy violation',
+      origin: req.headers.origin,
+      allowedOrigins: process.env.ALLOWED_ORIGINS 
+    });
+  } else {
+    console.error(err.stack);
+    res.status(500).json({ 
+      error: 'Something went wrong!',
+      message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
+  }
 });
 
 // 404 handler
@@ -59,9 +87,11 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-app.listen(PORT, () => {
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🔗 CORS allowed origins: ${process.env.ALLOWED_ORIGINS}`);
 });
 
 module.exports = app;
