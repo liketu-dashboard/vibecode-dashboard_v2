@@ -153,7 +153,7 @@ const Dashboard = () => {
           loading={loading}
         />
         <StatsCard
-          title={`Total Rewards ${getPeriodLabel(selectedPeriod)}`}
+          title={`Total Rewards HBD ${getPeriodLabel(selectedPeriod)}`}
           value={formatNumber(data.totalRewards)}
           icon={DollarSign}
           color="red"
