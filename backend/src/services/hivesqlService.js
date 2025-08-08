@@ -1,7 +1,37 @@
-// Fixed backend/src/services/hivesqlService.js
+// Updated backend/src/services/hivesqlService.js
+
 const hivesql = require('../config/database');
 
 class AnalyticsService {
+  // New method for last 24 hours active users
+  async getDailyActiveUsersLast24h() {
+    const query = `
+      SELECT 
+        COUNT(DISTINCT author) as active_users_24h
+      FROM Comments 
+      WHERE CONTAINS(json_metadata, 'app:liketu')
+        AND created >= DATEADD(hour, -24, GETDATE())
+    `;
+    
+    const result = await hivesql.executeQuery(query);
+    return result.data[0]?.active_users_24h || 0;
+  }
+
+  // New method for previous 24 hours (for percentage comparison)
+  async getDailyActiveUsersPrevious24h() {
+    const query = `
+      SELECT 
+        COUNT(DISTINCT author) as active_users_prev_24h
+      FROM Comments 
+      WHERE CONTAINS(json_metadata, 'app:liketu')
+        AND created >= DATEADD(hour, -48, GETDATE())
+        AND created < DATEADD(hour, -24, GETDATE())
+    `;
+    
+    const result = await hivesql.executeQuery(query);
+    return result.data[0]?.active_users_prev_24h || 0;
+  }
+
   async getDailyActiveUsers(days = 90) {
     const query = `
       SELECT 
@@ -18,25 +48,51 @@ class AnalyticsService {
     return result.data || [];
   }
 
-  async getTotalPosts() {
-    const query = `
-      SELECT COUNT(*) as total_posts
-      FROM Comments 
-      WHERE CONTAINS(json_metadata, 'app:liketu')
-        AND depth = 0
-    `;
+  async getTotalPosts(days = null) {
+    let query;
+    if (days === null) {
+      // All time (for "All" period)
+      query = `
+        SELECT COUNT(*) as total_posts
+        FROM Comments 
+        WHERE CONTAINS(json_metadata, 'app:liketu')
+          AND depth = 0
+      `;
+    } else {
+      // Filtered by time period
+      query = `
+        SELECT COUNT(*) as total_posts
+        FROM Comments 
+        WHERE CONTAINS(json_metadata, 'app:liketu')
+          AND depth = 0
+          AND created >= DATEADD(day, -${days}, GETDATE())
+      `;
+    }
     
     const result = await hivesql.executeQuery(query);
     return result.data[0]?.total_posts || 0;
   }
 
-  async getTotalComments() {
-    const query = `
-      SELECT COUNT(*) as total_comments
-      FROM Comments 
-      WHERE CONTAINS(json_metadata, 'app:liketu')
-        AND depth > 0
-    `;
+  async getTotalComments(days = null) {
+    let query;
+    if (days === null) {
+      // All time (for "All" period)
+      query = `
+        SELECT COUNT(*) as total_comments
+        FROM Comments 
+        WHERE CONTAINS(json_metadata, 'app:liketu')
+          AND depth > 0
+      `;
+    } else {
+      // Filtered by time period
+      query = `
+        SELECT COUNT(*) as total_comments
+        FROM Comments 
+        WHERE CONTAINS(json_metadata, 'app:liketu')
+          AND depth > 0
+          AND created >= DATEADD(day, -${days}, GETDATE())
+      `;
+    }
     
     const result = await hivesql.executeQuery(query);
     return result.data[0]?.total_comments || 0;
@@ -76,17 +132,34 @@ class AnalyticsService {
     return result.data || [];
   }
 
-  async getTotalRewards() {
-    const query = `
-      SELECT 
-        SUM(
-          CAST(REPLACE(total_payout_value, ' HBD', '') AS DECIMAL(10,3)) + 
-          CAST(REPLACE(curator_payout_value, ' HBD', '') AS DECIMAL(10,3))
-        ) as total_rewards
-      FROM Comments 
-      WHERE CONTAINS(json_metadata, 'app:liketu')
-        AND depth = 0
-    `;
+  async getTotalRewards(days = null) {
+    let query;
+    if (days === null) {
+      // All time (for "All" period)
+      query = `
+        SELECT 
+          SUM(
+            CAST(REPLACE(total_payout_value, ' HBD', '') AS DECIMAL(10,3)) + 
+            CAST(REPLACE(curator_payout_value, ' HBD', '') AS DECIMAL(10,3))
+          ) as total_rewards
+        FROM Comments 
+        WHERE CONTAINS(json_metadata, 'app:liketu')
+          AND depth = 0
+      `;
+    } else {
+      // Filtered by time period
+      query = `
+        SELECT 
+          SUM(
+            CAST(REPLACE(total_payout_value, ' HBD', '') AS DECIMAL(10,3)) + 
+            CAST(REPLACE(curator_payout_value, ' HBD', '') AS DECIMAL(10,3))
+          ) as total_rewards
+        FROM Comments 
+        WHERE CONTAINS(json_metadata, 'app:liketu')
+          AND depth = 0
+          AND created >= DATEADD(day, -${days}, GETDATE())
+      `;
+    }
     
     const result = await hivesql.executeQuery(query);
     return parseFloat(result.data[0]?.total_rewards || 0);
@@ -127,6 +200,7 @@ class AnalyticsService {
 
   async getAllAnalytics(period = '90D') {
     const days = this.getDaysFromPeriod(period);
+    const isAllTime = period === 'All';
     
     try {
       const [
@@ -136,20 +210,24 @@ class AnalyticsService {
         dailyPosts,
         dailyCommentsData,
         totalRewards,
-        dailyRewardsData
+        dailyRewardsData,
+        activeUsers24h,
+        activeUsersPrev24h
       ] = await Promise.all([
         this.getDailyActiveUsers(days),
-        this.getTotalPosts(),
-        this.getTotalComments(),
+        this.getTotalPosts(isAllTime ? null : days),
+        this.getTotalComments(isAllTime ? null : days),
         this.getDailyPosts(days),
         this.getDailyComments(days),
-        this.getTotalRewards(),
-        this.getDailyRewards(days)
+        this.getTotalRewards(isAllTime ? null : days),
+        this.getDailyRewards(days),
+        this.getDailyActiveUsersLast24h(),
+        this.getDailyActiveUsersPrevious24h()
       ]);
 
       return {
-        dailyActiveUsers: dailyUsers[0]?.active_users || 0,
-        previousDayUsers: dailyUsers[1]?.active_users || 0,
+        dailyActiveUsers24h: activeUsers24h,
+        previousDayUsers24h: activeUsersPrev24h,
         totalPosts,
         totalComments,
         totalRewards,

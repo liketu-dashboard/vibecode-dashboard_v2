@@ -1,3 +1,5 @@
+// Updated frontend/src/components/Dashboard.js
+
 import React, { useState, useEffect } from 'react';
 import { Users, FileText, MessageSquare, DollarSign, RefreshCw, AlertCircle } from 'lucide-react';
 import { analyticsAPI } from '../services/api';
@@ -6,11 +8,11 @@ import Chart from './Chart';
 
 const Dashboard = () => {
   const [data, setData] = useState({
-    dailyActiveUsers: 0,
+    dailyActiveUsers24h: 0,
     totalPosts: 0,
     totalComments: 0,
     totalRewards: 0,
-    previousDayUsers: 0,
+    previousDayUsers24h: 0,
     charts: {
       dailyActiveUsers: [],
       postsCreated: [],
@@ -47,9 +49,20 @@ const Dashboard = () => {
     fetchAnalytics();
   }, [selectedPeriod]);
 
-  const calculatePercentageChange = () => {
-    if (data.previousDayUsers === 0) return 0;
-    return ((data.dailyActiveUsers - data.previousDayUsers) / data.previousDayUsers * 100).toFixed(1);
+  const calculatePercentageChange24h = () => {
+    if (data.previousDayUsers24h === 0) return 0;
+    return ((data.dailyActiveUsers24h - data.previousDayUsers24h) / data.previousDayUsers24h * 100).toFixed(1);
+  };
+
+  // Helper function to get period label for titles
+  const getPeriodLabel = (period) => {
+    switch (period) {
+      case '7D': return '(last 7 days)';
+      case '30D': return '(last 30 days)';
+      case '90D': return '(last 90 days)';
+      case 'All': return '(all time)';
+      default: return '(last 90 days)';
+    }
   };
 
   const formatNumber = (num) => {
@@ -118,29 +131,29 @@ const Dashboard = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
-          title="Daily Active Users"
-          value={formatNumber(data.dailyActiveUsers)}
-          change={parseFloat(calculatePercentageChange())}
+          title="Daily Active Users (last 24h)"
+          value={formatNumber(data.dailyActiveUsers24h)}
+          change={parseFloat(calculatePercentageChange24h())}
           icon={Users}
           color="red"
           loading={loading}
         />
         <StatsCard
-          title="Total Posts"
+          title={`Total Posts ${getPeriodLabel(selectedPeriod)}`}
           value={formatNumber(data.totalPosts)}
           icon={FileText}
           color="teal"
           loading={loading}
         />
         <StatsCard
-          title="Total Comments"
+          title={`Total Comments ${getPeriodLabel(selectedPeriod)}`}
           value={formatNumber(data.totalComments)}
           icon={MessageSquare}
           color="blue"
           loading={loading}
         />
         <StatsCard
-          title="Total Rewards (HBD)"
+          title={`Total Rewards ${getPeriodLabel(selectedPeriod)}`}
           value={formatNumber(data.totalRewards)}
           icon={DollarSign}
           color="red"
